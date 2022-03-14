@@ -1,0 +1,24 @@
+operand        = _{ integer | decimal | constant | nested }
+    integer    = @{ ASCII_DIGIT ~ (ASCII_DIGIT | "_")* }
+    decimal    = @{ integer ~ "." ~ integer }
+    constant   = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+    nested     = _{ "(" ~ expression ~ ")"}
+
+operator       = _{ add | sub | mul | div | pow }
+    add        =  { "+" }
+    sub        =  { "-" }
+    mul        =  { "*" }
+    div        =  { "/" }
+    pow        =  { "^" }
+    elided_mul =  { "" }
+
+expression     =  { term ~ ((add | sub) ~ term)* }
+    // unary    =  { (add | sub)* ~ term }
+    term       = _{ atom ~ ((mul | div | elided_mul) ~ atom)* }
+    atom       = _{ operand ~ (pow ~ operand)* }
+
+input          = _{ SOI ~ expression ~ EOI }
+
+
+
+WHITESPACE     = _{ " " | "\t" | "\n" | "\r\n" }

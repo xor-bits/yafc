@@ -1,24 +1,25 @@
-operand        = _{ integer | decimal | constant | nested }
-    integer    = @{ ASCII_DIGIT ~ (ASCII_DIGIT | "_")* }
-    decimal    = @{ integer ~ "." ~ integer }
-    constant   = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
-    nested     = _{ "(" ~ expression ~ ")"}
+operand         =  { int | float | var | nested }
+  int           = @{ ASCII_DIGIT ~ (ASCII_DIGIT | "_")* }
+  float         = @{ int ~ "." ~ int }
+  var           = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+  nested        = _{ "(" ~ expr ~ ")"}
 
-operator       = _{ add | sub | mul | div | pow }
-    add        =  { "+" }
-    sub        =  { "-" }
-    mul        =  { "*" }
-    div        =  { "/" }
-    pow        =  { "^" }
-    elided_mul =  { "" }
+expr            =  { binary }
+  binary        =  { unary ~ ((add | sub) ~ unary)* }
+    add         =  { "+" }
+    sub         =  { "-" }
+  unary         =  { (pos | neg)* ~ term }
+    pos         =  { "+" }
+    neg         =  { "-" }
+  term          =  { atom ~ ((mul | div | elided_mul) ~ atom)* }
+    mul         =  { "*" }
+    div         =  { "/" }
+    elided_mul  =  { "" }
+  atom          =  { operand ~ (pow ~ operand)* }
+    pow         =  { "^" }
 
-expression     =  { term ~ ((add | sub) ~ term)* }
-    // unary    =  { (add | sub)* ~ term }
-    term       = _{ atom ~ ((mul | div | elided_mul) ~ atom)* }
-    atom       = _{ operand ~ (pow ~ operand)* }
-
-input          = _{ SOI ~ expression ~ EOI }
+input           =  { SOI ~ expr ~ EOI }
 
 
 
-WHITESPACE     = _{ " " | "\t" | "\n" | "\r\n" }
+WHITESPACE      = _{ " " | "\t" | "\n" | "\r\n" }

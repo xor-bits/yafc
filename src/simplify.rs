@@ -24,10 +24,13 @@ impl Simplifier {
     }
 
     fn run_once(ast: AstNode) -> AstNode {
-        const ZERO_F: AstNode = AstNode::Number(Number::Decimal(0.0));
         const ZERO_I: AstNode = AstNode::Number(Number::Integer(0));
+        const ONE_I: AstNode = AstNode::Number(Number::Integer(1));
 
         match ast {
+            // 0.0 == 0
+            AstNode::Number(Number::Decimal(a)) if a.abs() <= f64::EPSILON => ZERO_I,
+
             // a + 0 = a
             AstNode::BinExpr {
                 operator: BinOp::Add,
@@ -62,6 +65,26 @@ impl Simplifier {
             AstNode::BinExpr {
                 operator: BinOp::Mul,
                 operands: box (_, AstNode::Number(Number::Integer(0))),
+            } => ZERO_I,
+
+            // a^0 = 1 (where a can also be 0, so 0^0=1)
+            AstNode::BinExpr {
+                operator: BinOp::Pow,
+                operands: box (_, AstNode::Number(Number::Decimal(b))),
+            } if b.abs() <= f64::EPSILON => ONE_I,
+            AstNode::BinExpr {
+                operator: BinOp::Pow,
+                operands: box (_, AstNode::Number(Number::Integer(0))),
+            } => ONE_I,
+
+            // 0^b = 0 (where b cannot be 0, so 0^0=1)
+            AstNode::BinExpr {
+                operator: BinOp::Pow,
+                operands: box (AstNode::Number(Number::Decimal(a)), _),
+            } if a.abs() <= f64::EPSILON => ZERO_I,
+            AstNode::BinExpr {
+                operator: BinOp::Pow,
+                operands: box (AstNode::Number(Number::Integer(0)), _),
             } => ZERO_I,
 
             other => other,

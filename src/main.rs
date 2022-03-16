@@ -2,20 +2,15 @@
 
 //
 
-use crate::parse::parse;
+use ast::grammar::InputParser;
 use rustyline::{error::ReadlineError, Editor};
+use simplifier::Simplifier;
 
 //
 
 mod ast;
-mod parse;
-mod simplify;
-
-//
-
-#[derive(pest_derive::Parser)]
-#[grammar = "grammar.pest"]
-struct MathParser;
+mod eq;
+mod simplifier;
 
 //
 
@@ -29,11 +24,8 @@ fn main() {
             Ok(line) => {
                 rl.add_history_entry(&line);
 
-                match parse(&line)
-                    .map_err(|err| err.to_string())
-                    .and_then(|ast| ast.eval().map_err(str::to_string))
-                {
-                    Ok(ast) => println!("out[{i}]: {ast}"),
+                match InputParser::new().parse(&line) {
+                    Ok(ast) => println!("out[{i}]: {:#}", Simplifier::run(ast.clone()),),
                     Err(err) => eprintln!("{err}"),
                 };
             }

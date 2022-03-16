@@ -1,10 +1,47 @@
 use std::str::FromStr;
+use crate::ast::{Ast, UnaryOp, BinaryOp, Binary};
 
 grammar;
 
-pub Term: i32 {
-	<n:Num> => n,
-	"(" <t:Term> ")" => t,
+pub Input: Ast = {
+    Expr => <>.into(),
+};
+
+Expr: Binary = {
+    <e:Expr> "+" <f:Factor> => e.with(f),
+    <e:Expr> "-" <f:Factor> => e.with(f.with(-1)),
+    Factor => Binary::new(BinaryOp::Add).with(<>),
+};
+
+Factor: Binary = {
+    // <f:Factor> <t:Term> => f.with(t),
+    <f:Factor> "*" <t:Term> => f.with(t),
+    <f:Factor> "/" <t:Term> => f.with(t.with(-1)),
+    Term => Binary::new(BinaryOp::Mul).with(<>),
+};
+
+Term: Binary = {
+    "+" <t:Term> => t,
+    "-" <t:Term> => Binary::negate(t),
+    <a:Atom> "^" <t:Term> => t.with(a),
+    Atom => Binary::new(BinaryOp::Pow).with(<>),
+};
+
+Atom: Ast = {
+    <n:Num> <f:Postfix> => Ast::unary(f, Ast::Num(n)),
+    Num => Ast::Num(<>),
+    Var => Ast::Var(<>),
+    "(" <Expr> ")" => <>.into(),
+};
+
+Postfix: UnaryOp = {
+    "!" => UnaryOp::Fac,
 }
 
-Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
+Num: i64 = {
+    r"[0-9]+" => i64::from_str(<>).unwrap()
+};
+
+Var: String = {
+    r"[a-zA-Z][a-zA-Z0-9]*" => <>.to_string(),
+};

@@ -54,7 +54,6 @@ impl Simplifier {
     // combine terms
     // example: x + x = 2 * x
     fn combine_terms(mut ast: Ast, depth: usize) -> Ast {
-        log::debug!("combine_terms_init: {ast} == {ast:?}");
         if let Ast::Binary(Binary {
             operator: BinaryOp::Add,
             operands: terms,
@@ -102,6 +101,10 @@ impl Simplifier {
 
                         factor
                     }
+                    pow @ Ast::Binary(Binary { .. }) => {
+                        coeff = coeff.with(1);
+                        Some(pow.clone())
+                    }
                     looking_for => {
                         // loop through all other terms
                         for (i, new_coeff) in
@@ -113,11 +116,11 @@ impl Simplifier {
                             coeff = coeff.with(new_coeff);
                         }
 
-                        if !coeff.operands.is_empty() {
-                            Some(looking_for.clone())
-                        } else {
-                            None
-                        }
+                        Some(looking_for.clone())
+                        // if !coeff.operands.is_empty() {
+                        // } else {
+                        //     None
+                        // }
                     }
                 };
 
@@ -146,7 +149,10 @@ impl Simplifier {
 
     fn term_factor_coeff(term: &Ast, looking_for: &Ast) -> Option<Ast> {
         match term {
-            Ast::Binary(Binary { operands, operator }) => {
+            Ast::Binary(Binary {
+                operands,
+                operator: BinaryOp::Mul,
+            }) => {
                 let mut first = true;
                 let (looking_for, coeff): (Vec<&Ast>, Vec<&Ast>) =
                     operands.iter().partition(|factor| {
@@ -159,19 +165,47 @@ impl Simplifier {
                     });
 
                 if looking_for.len() == 1 {
-                    Some(
-                        Binary {
-                            operands: coeff.into_iter().cloned().collect(),
-                            operator: *operator,
-                        }
-                        .into(),
-                    )
+                    let operator = BinaryOp::Mul;
+                    let operands = coeff.into_iter().cloned().collect();
+
+                    Some(Binary { operands, operator }.into())
                 } else if looking_for.is_empty() {
                     None
                 } else {
                     unreachable!()
                 }
             }
+            Ast::Binary(Binary {
+                operands,
+                operator: BinaryOp::Pow,
+            }) => match operands.first() {
+                Some(first) if first.structural_eq(looking_for) => {
+                    let operator = BinaryOp::Pow;
+                    let operands = operands
+                        .iter()
+                        .cloned()
+                        .enumerate()
+                        .filter_map(|(i, ast)| {
+                            // decrease the power by one
+                            if i == 1 {
+                                match Self::binary_num_ops(
+                                    Binary::new(BinaryOp::Add).with(ast).with(-1).into(),
+                                    0,
+                                ) {
+                                    // power of 1 cancels out
+                                    Ast::Num(1) => None,
+                                    ast => Some(ast),
+                                }
+                            } else {
+                                Some(ast)
+                            }
+                        })
+                        .collect();
+
+                    Some(Binary { operands, operator }.into())
+                }
+                _ => None,
+            },
             other if other.structural_eq(looking_for) => Some(Ast::Num(1)),
             _ => None,
         }
@@ -200,7 +234,7 @@ impl Simplifier {
             let init = match operator {
                 BinaryOp::Add => 0,
                 BinaryOp::Mul => 1,
-                BinaryOp::Pow => 1,
+                BinaryOp::Pow => return Binary { operator, operands }.into(),
             };
             let mut result = init;
             let mut operands: Vec<Ast> = operands
@@ -210,7 +244,7 @@ impl Simplifier {
                         match operator {
                             BinaryOp::Add => result += n,
                             BinaryOp::Mul => result *= n,
-                            BinaryOp::Pow => result = (*n).pow(result as _),
+                            _ => unreachable!(),
                         };
                         false
                     }
@@ -264,15 +298,15 @@ mod test {
     #[test]
     pub fn test_de_paren() {
         let ast = Binary::new(BinaryOp::Mul)
-            .with(Binary::new(BinaryOp::Mul).with(0).with(1).build())
-            .with(Binary::new(BinaryOp::Add).with("a").with("b").build())
+            .with(Binary::new(BinaryOp::Mul).with(0).with(1))
+            .with(Binary::new(BinaryOp::Add).with("a").with("b"))
             .with(3)
             .build();
         let lhs = Simplifier::de_paren(ast, 0);
         let rhs = Binary::new(BinaryOp::Mul)
             .with(0)
             .with(1)
-            .with(Binary::new(BinaryOp::Add).with("a").with("b").build())
+            .with(Binary::new(BinaryOp::Add).with("a").with("b"))
             .with(3)
             .build();
 
@@ -285,15 +319,9 @@ mod test {
         // ==
         // (y * 2 + 3) * x + 3
         let ast = Binary::new(BinaryOp::Add)
-            .with(
-                Binary::new(BinaryOp::Mul)
-                    .with("y")
-                    .with("x")
-                    .with(2)
-                    .build(),
-            )
+            .with(Binary::new(BinaryOp::Mul).with("y").with("x").with(2))
             .with("x")
-            .with(Binary::new(BinaryOp::Mul).with("x").with(2).build())
+            .with(Binary::new(BinaryOp::Mul).with("x").with(2))
             .with(3)
             .build();
         let lhs = Simplifier::combine_terms(ast, 0);
@@ -302,12 +330,10 @@ mod test {
                 Binary::new(BinaryOp::Mul)
                     .with(
                         Binary::new(BinaryOp::Add)
-                            .with(Binary::new(BinaryOp::Mul).with("y").with(2).build())
-                            .with(3)
-                            .build(),
+                            .with(Binary::new(BinaryOp::Mul).with("y").with(2))
+                            .with(3),
                     )
-                    .with("x")
-                    .build(),
+                    .with("x"),
             )
             .with(3)
             .build();
@@ -316,7 +342,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_term_factor_coeff() {
+    pub fn test_term_factor_coeff_first() {
         let term = Binary::new(BinaryOp::Mul)
             .with("x")
             .with("y")
@@ -328,19 +354,10 @@ mod test {
             coeff,
             Some(Binary::new(BinaryOp::Mul).with("x").with(4).build())
         );
+    }
 
-        let term = Binary::new(BinaryOp::Mul)
-            .with("x")
-            .with("xx")
-            .with("y")
-            .with("yy")
-            .with(4)
-            .with(0)
-            .build();
-        let coeff = Simplifier::term_factor_coeff(&term, &"z".into());
-
-        assert_eq!(coeff, None);
-
+    #[test]
+    pub fn test_term_factor_coeff_second() {
         let term = Binary::new(BinaryOp::Mul)
             .with("x")
             .with("xx")
@@ -363,10 +380,57 @@ mod test {
                     .build()
             )
         );
+    }
 
-        let term = Ast::Var("xyz".into());
-        let coeff = Simplifier::term_factor_coeff(&term, &"xyz".into());
+    #[test]
+    pub fn test_term_factor_coeff_not_found() {
+        let term = Binary::new(BinaryOp::Mul)
+            .with("x")
+            .with("xx")
+            .with("y")
+            .with("yy")
+            .with(4)
+            .with(0)
+            .build();
+        let coeff = Simplifier::term_factor_coeff(&term, &"z".into());
 
-        assert_eq!(coeff, Some(Ast::Num(1)));
+        assert_eq!(coeff, None);
+    }
+
+    #[test]
+    pub fn test_term_factor_coeff_single() {
+        let term = "x".into();
+        let coeff = Simplifier::term_factor_coeff(&term, &"x".into());
+
+        assert_eq!(coeff, Some(1.into()));
+    }
+
+    #[test]
+    pub fn test_term_factor_coeff_power() {
+        let term = Binary::new(BinaryOp::Pow).with("x").with(2).build();
+        let coeff = Simplifier::term_factor_coeff(&term, &"x".into());
+
+        assert_eq!(coeff, Some("x".into()));
+    }
+
+    #[test]
+    pub fn test_term_factor_coeff_complex_power() {
+        let term = Binary::new(BinaryOp::Pow)
+            .with("x")
+            .with("y")
+            .with("z")
+            .build();
+        let coeff = Simplifier::term_factor_coeff(&term, &"x".into());
+
+        assert_eq!(
+            coeff,
+            Some(
+                Binary::new(BinaryOp::Pow)
+                    .with("x")
+                    .with(Binary::new(BinaryOp::Add).with("y").with(-1))
+                    .with("z")
+                    .build()
+            )
+        );
     }
 }

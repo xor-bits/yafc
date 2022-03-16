@@ -21,9 +21,13 @@ Factor: Binary = {
 };
 
 Term: Binary = {
-    "+" <t:Term> => t,
-    "-" <t:Term> => Binary::negate(t),
-    <a:Atom> "^" <t:Term> => t.with(a),
+    TermUnsigned,
+    "+" <t:TermUnsigned> => t,
+    "-" <t:TermUnsigned> => Binary::negate(t),
+};
+
+TermUnsigned: Binary = {
+    <t:TermUnsigned> "^" <a:Atom> => t.with(a),
     Atom => Binary::new(BinaryOp::Pow).with(<>),
 };
 

@@ -1,5 +1,6 @@
 #![feature(box_patterns)]
 #![feature(drain_filter)]
+#![feature(if_let_guard)]
 
 //
 

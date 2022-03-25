@@ -14,7 +14,9 @@ Expr: Binary = {
 };
 
 Factor: Binary = {
-    // <f:Factor> <t:Term> => f.with(t),
+    <f:Factor> <n:Num> => f.with(n),
+    <f:Factor> <v:Var> => f.with(v),
+    <f:Factor> "(" <e:Expr> ")" => f.with(e),
     <f:Factor> "*" <t:Term> => f.with(t),
     <f:Factor> "/" <t:Term> => f.with(t.with(-1)),
     Term => Binary::new(BinaryOp::Mul).with(<>),

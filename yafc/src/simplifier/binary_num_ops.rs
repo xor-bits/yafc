@@ -26,12 +26,12 @@ impl Simplifier {
             let operands = match operator {
                 // power op has to be handled differently
                 // because there the order of the operands matter
-                BinaryOp::Pow => operands.into_iter().fold(vec![], |mut acc, ast| {
+                BinaryOp::Pow => operands.into_iter().rev().fold(vec![], |mut acc, ast| {
                     let x = (acc.last_mut(), ast);
                     match x {
                         (Some(Ast::Num(a)), Ast::Num(b)) => {
-                            if let Ok(b) = b.try_into() {
-                                *a = a.pow(b)
+                            if let Ok(c) = (*a).try_into() {
+                                *a = b.pow(c)
                             } else {
                                 acc.push(Ast::Num(b))
                             }
@@ -42,6 +42,7 @@ impl Simplifier {
                         (Some(_), Ast::Num(1)) => {}
                         (Some(_) | None, ast) => acc.push(ast),
                     }
+                    acc.reverse();
                     acc
                 }),
                 // otherwise, all numbers are just collected

@@ -1,4 +1,3 @@
-use super::Simplifier;
 use crate::ast::{
     binary::{Binary, BinaryOp},
     Ast,
@@ -225,8 +224,7 @@ pub fn term_factor_extract(term: Ast, factor: &Ast) -> TermFactorExtractResult {
                                 .with(lhs)
                                 .with(Binary::new(BinaryOp::Mul).with(rhs).with(-1).build()),
                         )
-                        .build()
-                        .map(32, |ast| Simplifier::binary_num_ops(ast, 0));
+                        .build();
 
                     TermFactorExtractResult::Some {
                         factor: base,
@@ -263,16 +261,33 @@ pub fn term_factor_extract(term: Ast, factor: &Ast) -> TermFactorExtractResult {
 
 #[cfg(test)]
 mod test {
-    use std::fmt::{Debug, Display};
-
     use crate::{
+        assert_eq_display,
         ast::binary::{Binary, BinaryOp},
-        simplifier::factorize::{term_factor_extract, term_factors, TermFactorExtractResult},
+        simplifier::{
+            factorize::{term_factor_extract, term_factors, TermFactorExtractResult},
+            Simplifier,
+        },
     };
 
-    pub fn assert_eq<T: Debug + Display + PartialEq>(lhs: T, rhs: T) {
-        assert_eq!(lhs, rhs, "\n left: {lhs}\nright: {rhs}")
+    //
+
+    impl TermFactorExtractResult {
+        fn binary_ops(self) -> Self {
+            match self {
+                TermFactorExtractResult::Some {
+                    factor,
+                    coefficient,
+                } => TermFactorExtractResult::Some {
+                    factor,
+                    coefficient: coefficient.map(32, Simplifier::binary_num_ops),
+                },
+                other => other,
+            }
+        }
     }
+
+    //
 
     #[test]
     pub fn test_term_factors_mul() {
@@ -362,7 +377,7 @@ mod test {
             coefficient: Binary::new(BinaryOp::Mul).with(2).with("y").build(),
         };
 
-        assert_eq(lhs, rhs);
+        assert_eq_display(lhs, rhs);
     }
 
     #[test]
@@ -374,20 +389,20 @@ mod test {
             .with("z")
             .build();
 
-        let lhs = term_factor_extract(term, &"x".into());
+        let lhs = term_factor_extract(term, &"x".into()).binary_ops();
         let rhs = TermFactorExtractResult::Some {
             factor: "x".into(),
             coefficient: Binary::new(BinaryOp::Pow)
                 .with("x")
                 .with(
                     Binary::new(BinaryOp::Add)
-                        .with(Binary::new(BinaryOp::Pow).with("y").with("z"))
-                        .with(-1),
+                        .with(-1)
+                        .with(Binary::new(BinaryOp::Pow).with("y").with("z")),
                 )
                 .build(),
         };
 
-        assert_eq(lhs, rhs);
+        assert_eq_display(lhs, rhs);
     }
 
     #[test]
@@ -399,7 +414,7 @@ mod test {
             .with(Binary::new(BinaryOp::Pow).with("y").with(3))
             .build();
 
-        let lhs = term_factor_extract(term, &"y".into());
+        let lhs = term_factor_extract(term, &"y".into()).binary_ops();
         let rhs = TermFactorExtractResult::Some {
             factor: "y".into(),
             coefficient: Binary::new(BinaryOp::Mul)
@@ -409,7 +424,7 @@ mod test {
                 .build(),
         };
 
-        assert_eq(lhs, rhs);
+        assert_eq_display(lhs, rhs);
     }
 
     #[test]
@@ -418,13 +433,13 @@ mod test {
         let term = Binary::new(BinaryOp::Pow).with("y").with(3).build();
 
         let factor = term.clone();
-        let lhs = term_factor_extract(term, &factor);
+        let lhs = term_factor_extract(term, &factor).binary_ops();
         let rhs = TermFactorExtractResult::Some {
             factor: "y".into(),
             coefficient: 1.into(),
         };
 
-        assert_eq(lhs, rhs);
+        assert_eq_display(lhs, rhs);
     }
 
     #[test]
@@ -441,10 +456,10 @@ mod test {
             .with(Binary::new(BinaryOp::Mul).with(3).with("z"))
             .build();
 
-        let factor = Binary::new(BinaryOp::Pow).with("y").with("3").build();
-        let lhs = term_factor_extract(term, &factor);
+        let factor = Binary::new(BinaryOp::Pow).with("y").with(3).build();
+        let lhs = term_factor_extract(term, &factor).binary_ops();
         let rhs = TermFactorExtractResult::Some {
-            factor: "y".into(),
+            factor,
             coefficient: Binary::new(BinaryOp::Mul)
                 .with(
                     Binary::new(BinaryOp::Pow)
@@ -456,6 +471,6 @@ mod test {
                 .build(),
         };
 
-        assert_eq(lhs, rhs);
+        assert_eq_display(lhs, rhs);
     }
 }

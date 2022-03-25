@@ -8,6 +8,7 @@ use std::mem;
 
 //
 
+mod de_paren;
 mod factorize;
 
 //
@@ -18,38 +19,17 @@ pub struct Simplifier;
 
 impl Simplifier {
     pub fn run(mut ast: Ast) -> Ast {
-        ast = ast.map(32, |ast| Self::de_paren(ast, 0));
-        ast = ast.map(32, |ast| Self::combine_terms(ast, 0));
-        ast = ast.map(32, |ast| Self::unary_num_ops(ast, 0));
-        ast = ast.map(32, |ast| Self::binary_num_ops(ast, 0));
+        ast = ast.map(32, Self::de_paren);
+        ast = ast.map(32, Self::combine_terms);
+        ast = ast.map(32, Self::unary_num_ops);
+        ast = ast.map(32, Self::binary_num_ops);
 
-        ast
-    }
-
-    // remove unnecessary parenthesis
-    // example: replace (a+b)+c with a+b+c and so on
-    fn de_paren(mut ast: Ast, _: usize) -> Ast {
-        if let Ast::Binary(Binary { operator, operands }) = ast {
-            let operands = operands
-                .into_iter()
-                .flat_map(move |ast| match ast {
-                    Ast::Binary(Binary {
-                        operator: b,
-                        operands,
-                    }) if operator == b => operands,
-                    ast => vec![ast],
-                })
-                .collect();
-
-            ast = Binary { operator, operands }.into();
-            // log::debug!("de_paren: {ast} == {ast:?}");
-        }
         ast
     }
 
     // combine terms
     // example: x + x = 2 * x
-    fn combine_terms(mut ast: Ast, depth: usize) -> Ast {
+    fn combine_terms(mut ast: Ast) -> Ast {
         if let Ast::Binary(Binary {
             operator: BinaryOp::Add,
             operands: mut terms,
@@ -91,6 +71,9 @@ impl Simplifier {
                 }
             }
 
+            // reverse new_terms to make it be more consistent with the original TODO: VecDeque
+            new_terms.reverse();
+
             ast = Binary {
                 operator: BinaryOp::Add,
                 operands: new_terms,
@@ -103,7 +86,7 @@ impl Simplifier {
 
     // calculate unary operations
     // example: replace 4! with 24
-    fn unary_num_ops(mut ast: Ast, _: usize) -> Ast {
+    fn unary_num_ops(mut ast: Ast) -> Ast {
         match ast {
             Ast::Unary(Unary {
                 operator: UnaryOp::Fac,
@@ -131,7 +114,7 @@ impl Simplifier {
     /// a^2^3 | a^8
     /// a^0 | 1
     /// a^1 | a
-    fn binary_num_ops(mut ast: Ast, _: usize) -> Ast {
+    fn binary_num_ops(mut ast: Ast) -> Ast {
         if let Ast::Binary(Binary { operator, operands }) = ast {
             let operands = match operator {
                 // power op has to be handled differently
@@ -162,11 +145,11 @@ impl Simplifier {
                         .into_iter()
                         .filter(|ast| match ast {
                             Ast::Num(n) => {
-                                match operator {
-                                    BinaryOp::Add => result += n,
-                                    BinaryOp::Mul => result *= n,
-                                    _ => unreachable!(),
-                                };
+                                if other == BinaryOp::Add {
+                                    result += n
+                                } else {
+                                    result *= n
+                                }
                                 false
                             }
                             _ => true,
@@ -174,7 +157,8 @@ impl Simplifier {
                         .collect();
 
                     if result != init {
-                        operands.push(Ast::Num(result));
+                        // TODO: VecDeque
+                        operands.insert(0, Ast::Num(result));
                     }
                     operands
                 }
@@ -193,58 +177,36 @@ impl Simplifier {
 #[cfg(test)]
 mod test {
     use super::Simplifier;
-    use crate::ast::{
-        binary::{Binary, BinaryOp},
-        Ast,
+    use crate::{
+        assert_eq_display,
+        ast::binary::{Binary, BinaryOp},
     };
-
-    pub fn ast_eq(lhs: &Ast, rhs: &Ast) {
-        assert_eq!(lhs, rhs, "\nleft: {lhs}\nright: {rhs}")
-    }
-
-    #[test]
-    pub fn test_de_paren() {
-        let ast = Binary::new(BinaryOp::Mul)
-            .with(Binary::new(BinaryOp::Mul).with(0).with(1))
-            .with(Binary::new(BinaryOp::Add).with("a").with("b"))
-            .with(3)
-            .build();
-        let lhs = Simplifier::de_paren(ast, 0);
-        let rhs = Binary::new(BinaryOp::Mul)
-            .with(0)
-            .with(1)
-            .with(Binary::new(BinaryOp::Add).with("a").with("b"))
-            .with(3)
-            .build();
-
-        ast_eq(&lhs, &rhs);
-    }
 
     #[test]
     pub fn test_combine_terms() {
         // y * x * 2 + x + x * 2 + 3
         // ==
-        // (y * 2 + 3) * x + 3
+        // 3 + (3 + 2 * y) * x
         let ast = Binary::new(BinaryOp::Add)
             .with(Binary::new(BinaryOp::Mul).with("y").with("x").with(2))
             .with("x")
             .with(Binary::new(BinaryOp::Mul).with("x").with(2))
             .with(3)
             .build();
-        let lhs = Simplifier::combine_terms(ast, 0);
+        let lhs = Simplifier::combine_terms(ast).map(32, Simplifier::binary_num_ops);
         let rhs = Binary::new(BinaryOp::Add)
+            .with(3)
             .with(
                 Binary::new(BinaryOp::Mul)
                     .with(
                         Binary::new(BinaryOp::Add)
-                            .with(Binary::new(BinaryOp::Mul).with("y").with(2))
-                            .with(3),
+                            .with(3)
+                            .with(Binary::new(BinaryOp::Mul).with(2).with("y")),
                     )
                     .with("x"),
             )
-            .with(3)
             .build();
 
-        ast_eq(&lhs, &rhs);
+        assert_eq_display(&lhs, &rhs);
     }
 }

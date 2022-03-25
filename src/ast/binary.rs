@@ -43,6 +43,10 @@ impl Binary {
         self.into()
     }
 
+    pub fn push<A: Into<Ast>>(&mut self, ast: A) {
+        self.operands.push(ast.into());
+    }
+
     pub(super) fn format(
         &self,
         f: &mut fmt::Formatter<'_>,

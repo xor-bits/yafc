@@ -14,3 +14,4 @@ env_logger = "0.9.0"
 rustyline = "9.1.2"
 lalrpop-util = { version = "0.19.7", features = ["lexer"] }
 regex = "1.5.5"
+colorful = "0.2.1"

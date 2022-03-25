@@ -1,10 +1,14 @@
-use std::collections::HashSet;
-
+use self::factorize::{term_factor_extract, term_factors, TermFactorExtractResult};
 use crate::ast::{
     binary::{Binary, BinaryOp},
     unary::{Unary, UnaryOp},
     Ast,
 };
+use std::mem;
+
+//
+
+mod factorize;
 
 //
 
@@ -13,20 +17,12 @@ pub struct Simplifier;
 //
 
 impl Simplifier {
-    pub fn run(ast: Ast) -> Ast {
-        Self::run_once(ast, 0)
-    }
+    pub fn run(mut ast: Ast) -> Ast {
+        ast = ast.map(32, |ast| Self::de_paren(ast, 0));
+        ast = ast.map(32, |ast| Self::combine_terms(ast, 0));
+        ast = ast.map(32, |ast| Self::unary_num_ops(ast, 0));
+        ast = ast.map(32, |ast| Self::binary_num_ops(ast, 0));
 
-    // make simplifier recursive
-    fn recurse(mut ast: Ast, depth: usize) -> Ast {
-        if let Ast::Binary(Binary { operator, operands }) = ast {
-            let operands = operands
-                .into_iter()
-                .map(|ast| Self::run_once(ast, depth + 1))
-                .collect();
-            ast = Binary { operator, operands }.into();
-            // log::debug!("recurse: {ast} == {ast:?}");
-        }
         ast
     }
 
@@ -56,83 +52,42 @@ impl Simplifier {
     fn combine_terms(mut ast: Ast, depth: usize) -> Ast {
         if let Ast::Binary(Binary {
             operator: BinaryOp::Add,
-            operands: terms,
+            operands: mut terms,
         }) = ast
         {
             let mut new_terms = vec![];
 
-            // loop through terms
-            let mut skipped = HashSet::new();
-            for (i, term) in terms.iter().enumerate() {
-                if skipped.contains(&i) {
-                    continue;
-                }
+            while let Some(last) = terms.last().cloned() {
+                let first_non_0_common_factor = term_factors(&last)
+                    .map(|factor| {
+                        let mut coeff = Binary::new(BinaryOp::Add);
 
-                let mut coeff = Binary::new(BinaryOp::Add);
-                let factor = match term {
-                    Ast::Binary(Binary {
-                        operator: BinaryOp::Mul,
-                        operands: factors,
-                    }) => {
-                        let mut factor = None;
-                        // loop through the product in this term
-                        for looking_for in factors {
-                            // loop through all other terms
-                            for (i, new_coeff) in
-                                terms.iter().enumerate().skip(i).filter_map(|(i, term)| {
-                                    Some((i, Self::term_factor_coeff(term, looking_for)?))
-                                })
-                            {
-                                factor = Some(looking_for.clone());
-                                skipped.insert(i);
-                                coeff = coeff.with(new_coeff);
+                        terms.drain_filter(|ast| {
+                            let mut tmp = Ast::Num(0);
+                            mem::swap(&mut tmp, ast);
+                            match term_factor_extract(tmp, factor) {
+                                TermFactorExtractResult::Some { coefficient, .. } => {
+                                    coeff.push(coefficient);
+                                    true
+                                }
+                                TermFactorExtractResult::None { mut original } => {
+                                    // swap back
+                                    mem::swap(&mut original, ast);
+                                    false
+                                }
                             }
+                        });
 
-                            // discard those that only have itself to combine with
-                            if coeff.operands.len() == 1 {
-                                factor = None;
-                                coeff.operands.clear();
-                            }
+                        assert!(!coeff.operands.is_empty());
 
-                            if factor.is_some() {
-                                break;
-                            }
-                        }
+                        (factor.clone(), coeff)
+                    })
+                    .next();
 
-                        factor
-                    }
-                    pow @ Ast::Binary(Binary { .. }) => {
-                        coeff = coeff.with(1);
-                        Some(pow.clone())
-                    }
-                    looking_for => {
-                        // loop through all other terms
-                        for (i, new_coeff) in
-                            terms.iter().enumerate().skip(i).filter_map(|(i, term)| {
-                                Some((i, Self::term_factor_coeff(term, looking_for)?))
-                            })
-                        {
-                            skipped.insert(i);
-                            coeff = coeff.with(new_coeff);
-                        }
-
-                        Some(looking_for.clone())
-                        // if !coeff.operands.is_empty() {
-                        // } else {
-                        //     None
-                        // }
-                    }
-                };
-
-                let coeff = Self::binary_num_ops(coeff.build(), depth);
-                log::debug!("coeff {coeff} factor {factor:?}");
-
-                match (factor, coeff) {
-                    (Some(factor), Ast::Num(1)) => new_terms.push(factor),
-                    (Some(factor), n) => {
-                        new_terms.push(Binary::new(BinaryOp::Mul).with(n).with(factor).build())
-                    }
-                    _ => {}
+                if let Some((factor, coeff)) = first_non_0_common_factor {
+                    new_terms.push(Binary::new(BinaryOp::Mul).with(coeff).with(factor).build());
+                } else {
+                    new_terms.push(terms.pop().unwrap());
                 }
             }
 
@@ -140,75 +95,10 @@ impl Simplifier {
                 operator: BinaryOp::Add,
                 operands: new_terms,
             }
-            .into();
-            // log::debug!("combine_terms: {ast} == {ast:?}");
+            .build();
         }
 
         ast
-    }
-
-    fn term_factor_coeff(term: &Ast, looking_for: &Ast) -> Option<Ast> {
-        match term {
-            Ast::Binary(Binary {
-                operands,
-                operator: BinaryOp::Mul,
-            }) => {
-                let mut first = true;
-                let (looking_for, coeff): (Vec<&Ast>, Vec<&Ast>) =
-                    operands.iter().partition(|factor| {
-                        if first && factor.structural_eq(looking_for) {
-                            first = false;
-                            true
-                        } else {
-                            false
-                        }
-                    });
-
-                if looking_for.len() == 1 {
-                    let operator = BinaryOp::Mul;
-                    let operands = coeff.into_iter().cloned().collect();
-
-                    Some(Binary { operands, operator }.into())
-                } else if looking_for.is_empty() {
-                    None
-                } else {
-                    unreachable!()
-                }
-            }
-            Ast::Binary(Binary {
-                operands,
-                operator: BinaryOp::Pow,
-            }) => match operands.first() {
-                Some(first) if first.structural_eq(looking_for) => {
-                    let operator = BinaryOp::Pow;
-                    let operands = operands
-                        .iter()
-                        .cloned()
-                        .enumerate()
-                        .filter_map(|(i, ast)| {
-                            // decrease the power by one
-                            if i == 1 {
-                                match Self::binary_num_ops(
-                                    Binary::new(BinaryOp::Add).with(ast).with(-1).into(),
-                                    0,
-                                ) {
-                                    // power of 1 cancels out
-                                    Ast::Num(1) => None,
-                                    ast => Some(ast),
-                                }
-                            } else {
-                                Some(ast)
-                            }
-                        })
-                        .collect();
-
-                    Some(Binary { operands, operator }.into())
-                }
-                _ => None,
-            },
-            other if other.structural_eq(looking_for) => Some(Ast::Num(1)),
-            _ => None,
-        }
     }
 
     // calculate unary operations
@@ -227,55 +117,72 @@ impl Simplifier {
         ast
     }
 
-    // calculate binary operations immediately calculable
-    // example: replace 1+a+2+3 with 6+a
+    /// calculate binary operations immediately calculable
+    ///
+    /// examples:
+    ///
+    /// replace | with
+    /// :-:|:-:
+    /// 1+a+2+3 | 6+a
+    /// 0+a | a
+    /// 1*a*2*3 | 6*a
+    /// 1*a | a
+    /// 1^a^2^3 | 1
+    /// a^2^3 | a^8
+    /// a^0 | 1
+    /// a^1 | a
     fn binary_num_ops(mut ast: Ast, _: usize) -> Ast {
         if let Ast::Binary(Binary { operator, operands }) = ast {
-            let init = match operator {
-                BinaryOp::Add => 0,
-                BinaryOp::Mul => 1,
-                BinaryOp::Pow => return Binary { operator, operands }.into(),
-            };
-            let mut result = init;
-            let mut operands: Vec<Ast> = operands
-                .into_iter()
-                .filter(|ast| match ast {
-                    Ast::Num(n) => {
-                        match operator {
-                            BinaryOp::Add => result += n,
-                            BinaryOp::Mul => result *= n,
-                            _ => unreachable!(),
-                        };
-                        false
+            let operands = match operator {
+                // power op has to be handled differently
+                // because there the order of the operands matter
+                BinaryOp::Pow => operands.into_iter().fold(vec![], |mut acc, ast| {
+                    let x = (acc.last_mut(), ast);
+                    match x {
+                        (Some(Ast::Num(a)), Ast::Num(b)) => {
+                            if let Ok(b) = b.try_into() {
+                                *a = a.pow(b)
+                            } else {
+                                acc.push(Ast::Num(b))
+                            }
+                        }
+                        (Some(ast @ Ast::Num(0)), _) => *ast = Ast::Num(0),
+                        (Some(ast @ Ast::Num(1)), _) => *ast = Ast::Num(1),
+                        (Some(ast), Ast::Num(0)) => *ast = Ast::Num(1),
+                        (Some(_), Ast::Num(1)) => {}
+                        (Some(_) | None, ast) => acc.push(ast),
                     }
-                    _ => true,
-                })
-                .collect();
+                    acc
+                }),
+                // otherwise, all numbers are just collected
+                other => {
+                    let init = if other == BinaryOp::Add { 0 } else { 1 };
+                    let mut result = init;
+                    let mut operands: Vec<Ast> = operands
+                        .into_iter()
+                        .filter(|ast| match ast {
+                            Ast::Num(n) => {
+                                match operator {
+                                    BinaryOp::Add => result += n,
+                                    BinaryOp::Mul => result *= n,
+                                    _ => unreachable!(),
+                                };
+                                false
+                            }
+                            _ => true,
+                        })
+                        .collect();
 
-            if result != init {
-                operands.push(Ast::Num(result));
-            }
+                    if result != init {
+                        operands.push(Ast::Num(result));
+                    }
+                    operands
+                }
+            };
 
             ast = Binary { operator, operands }.into();
             // log::debug!("binary_num_ops: {ast:?}");
         }
-
-        ast
-    }
-
-    fn run_once(mut ast: Ast, depth: usize) -> Ast {
-        if depth >= 32 {
-            panic!("Recursion depth limit")
-        }
-        // log::debug!("simplify-init: {ast:?}");
-
-        ast = Self::recurse(ast, depth);
-        ast = Self::de_paren(ast, depth);
-        ast = Self::combine_terms(ast, depth);
-        ast = Self::unary_num_ops(ast, depth);
-        ast = Self::binary_num_ops(ast, depth);
-
-        // log::debug!("simplify: {ast} == {ast:?}");
 
         ast
     }
@@ -291,7 +198,7 @@ mod test {
         Ast,
     };
 
-    pub fn ast_eq(lhs: Ast, rhs: Ast) {
+    pub fn ast_eq(lhs: &Ast, rhs: &Ast) {
         assert_eq!(lhs, rhs, "\nleft: {lhs}\nright: {rhs}")
     }
 
@@ -310,7 +217,7 @@ mod test {
             .with(3)
             .build();
 
-        ast_eq(lhs, rhs);
+        ast_eq(&lhs, &rhs);
     }
 
     #[test]
@@ -338,99 +245,6 @@ mod test {
             .with(3)
             .build();
 
-        ast_eq(lhs, rhs);
-    }
-
-    #[test]
-    pub fn test_term_factor_coeff_first() {
-        let term = Binary::new(BinaryOp::Mul)
-            .with("x")
-            .with("y")
-            .with(4)
-            .build();
-        let coeff = Simplifier::term_factor_coeff(&term, &"y".into());
-
-        assert_eq!(
-            coeff,
-            Some(Binary::new(BinaryOp::Mul).with("x").with(4).build())
-        );
-    }
-
-    #[test]
-    pub fn test_term_factor_coeff_second() {
-        let term = Binary::new(BinaryOp::Mul)
-            .with("x")
-            .with("xx")
-            .with("y")
-            .with("yy")
-            .with(4)
-            .with(0)
-            .build();
-        let coeff = Simplifier::term_factor_coeff(&term, &"xx".into());
-
-        assert_eq!(
-            coeff,
-            Some(
-                Binary::new(BinaryOp::Mul)
-                    .with("x")
-                    .with("y")
-                    .with("yy")
-                    .with(4)
-                    .with(0)
-                    .build()
-            )
-        );
-    }
-
-    #[test]
-    pub fn test_term_factor_coeff_not_found() {
-        let term = Binary::new(BinaryOp::Mul)
-            .with("x")
-            .with("xx")
-            .with("y")
-            .with("yy")
-            .with(4)
-            .with(0)
-            .build();
-        let coeff = Simplifier::term_factor_coeff(&term, &"z".into());
-
-        assert_eq!(coeff, None);
-    }
-
-    #[test]
-    pub fn test_term_factor_coeff_single() {
-        let term = "x".into();
-        let coeff = Simplifier::term_factor_coeff(&term, &"x".into());
-
-        assert_eq!(coeff, Some(1.into()));
-    }
-
-    #[test]
-    pub fn test_term_factor_coeff_power() {
-        let term = Binary::new(BinaryOp::Pow).with("x").with(2).build();
-        let coeff = Simplifier::term_factor_coeff(&term, &"x".into());
-
-        assert_eq!(coeff, Some("x".into()));
-    }
-
-    #[test]
-    pub fn test_term_factor_coeff_complex_power() {
-        let term = Binary::new(BinaryOp::Pow)
-            .with("x")
-            .with("y")
-            .with("z")
-            .build();
-        let coeff = Simplifier::term_factor_coeff(&term, &"x".into());
-
-        assert_eq!(
-            coeff,
-            Some(
-                Binary::new(BinaryOp::Pow)
-                    .with("x")
-                    .with(Binary::new(BinaryOp::Add).with("y").with(-1))
-                    .with("z")
-                    .build()
-            )
-        );
+        ast_eq(&lhs, &rhs);
     }
 }

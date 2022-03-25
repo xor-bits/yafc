@@ -1,8 +1,10 @@
 #![feature(box_patterns)]
+#![feature(drain_filter)]
 
 //
 
 use ast::grammar::InputParser;
+use log::LevelFilter;
 use rustyline::{error::ReadlineError, Editor};
 use simplifier::Simplifier;
 
@@ -15,7 +17,10 @@ mod simplifier;
 //
 
 fn main() {
-    env_logger::init();
+    env_logger::builder()
+        .parse_default_env()
+        .filter(Some("rustyline"), LevelFilter::Error)
+        .init();
 
     let mut rl = Editor::<()>::new();
     let _ = rl.load_history("history.txt");

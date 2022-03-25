@@ -1,6 +1,5 @@
-use crate::ast::{binary::Binary, Ast};
-
 use super::Simplifier;
+use crate::ast::{binary::Binary, Ast};
 
 //
 

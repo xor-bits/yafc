@@ -11,6 +11,13 @@ a simple WIP computer algebra system
  
 </div>
 
+Nightly required:
+```bash
+rustup override set nightly
+```
+
+Examples:
+
 ```bash
 in: -2^3^2
 out[0]: -512

@@ -8,6 +8,10 @@ use std::fmt::{Debug, Display};
 
 //
 
+pub use grammar::InputParser;
+
+//
+
 pub mod binary;
 pub mod unary;
 

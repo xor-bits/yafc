@@ -1,9 +1,8 @@
+use super::Simplifier;
 use crate::ast::{
     binary::{Binary, BinaryOp},
     Ast,
 };
-
-use super::Simplifier;
 
 //
 

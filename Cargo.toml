@@ -1,17 +1,2 @@
-[package]
-name = "yafc"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[build-dependencies]
-lalrpop = "0.19.7"
-
-[dependencies]
-log = "0.4.14"
-env_logger = "0.9.0"
-rustyline = "9.1.2"
-lalrpop-util = { version = "0.19.7", features = ["lexer"] }
-regex = "1.5.5"
-colorful = "0.2.1"
+[workspace]
+members = ["yafc", "yafcli"]

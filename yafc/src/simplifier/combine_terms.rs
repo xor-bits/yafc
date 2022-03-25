@@ -1,5 +1,4 @@
-use std::mem;
-
+use super::{factorize::term_factors, Simplifier};
 use crate::{
     ast::{
         binary::{Binary, BinaryOp},
@@ -7,8 +6,7 @@ use crate::{
     },
     simplifier::factorize::{term_factor_extract, TermFactorExtractResult},
 };
-
-use super::{factorize::term_factors, Simplifier};
+use std::mem;
 
 //
 

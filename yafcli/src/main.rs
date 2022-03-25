@@ -1,19 +1,6 @@
-#![feature(box_patterns)]
-#![feature(drain_filter)]
-
-//
-
-use ast::grammar::InputParser;
 use log::LevelFilter;
 use rustyline::{error::ReadlineError, Editor};
-use simplifier::Simplifier;
-use std::fmt::{Debug, Display};
-
-//
-
-mod ast;
-mod eq;
-mod simplifier;
+use yafc::{ast::InputParser, simplifier::Simplifier};
 
 //
 
@@ -45,10 +32,4 @@ fn main() {
         }
     }
     rl.save_history("history.txt").unwrap();
-}
-
-//
-
-pub fn assert_eq_display<T: PartialEq + Debug + Display>(lhs: T, rhs: T) {
-    assert_eq!(lhs, rhs, "\n left: {lhs}\nright: {rhs}")
 }

@@ -1,7 +1,10 @@
 use super::Simplifier;
-use crate::ast::{
-    binary::{Binary, BinaryOp},
-    Ast,
+use crate::{
+    ast::{
+        binary::{Binary, BinaryOp},
+        Ast,
+    },
+    build_ast,
 };
 
 //
@@ -23,28 +26,28 @@ impl Simplifier {
     /// a^1 | a
     pub fn binary_num_ops(mut ast: Ast) -> Ast {
         if let Ast::Binary(Binary { operator, operands }) = ast {
-            let operands = match operator {
+            ast = match operator {
                 // power op has to be handled differently
                 // because there the order of the operands matter
-                BinaryOp::Pow => operands.into_iter().rev().fold(vec![], |mut acc, ast| {
-                    let x = (acc.last_mut(), ast);
-                    match x {
-                        (Some(Ast::Num(a)), Ast::Num(b)) => {
-                            if let Ok(c) = (*a).try_into() {
-                                *a = b.pow(c)
-                            } else {
-                                acc.push(Ast::Num(b))
+                BinaryOp::Pow => {
+                    operands
+                        .into_iter()
+                        .rev()
+                        .fold(Ast::Num(1), |acc, ast| match (acc, ast) {
+                            (Ast::Num(a), Ast::Num(b)) => {
+                                if let Ok(c) = a.try_into() {
+                                    Ast::Num(b.pow(c))
+                                } else {
+                                    build_ast!(^ b a)
+                                }
                             }
-                        }
-                        (Some(ast @ Ast::Num(0)), _) => *ast = Ast::Num(0),
-                        (Some(ast @ Ast::Num(1)), _) => *ast = Ast::Num(1),
-                        (Some(ast), Ast::Num(0)) => *ast = Ast::Num(1),
-                        (Some(_), Ast::Num(1)) => {}
-                        (Some(_) | None, ast) => acc.push(ast),
-                    }
-                    acc.reverse();
-                    acc
-                }),
+                            (Ast::Num(0), _) => Ast::Num(1),
+                            (Ast::Num(1), ast) => ast,
+                            (_, Ast::Num(0)) => Ast::Num(0),
+                            (_, Ast::Num(1)) => Ast::Num(1),
+                            (rhs, lhs) => build_ast!(^ lhs rhs),
+                        })
+                }
                 // otherwise, all numbers are just collected
                 other => {
                     let init = if other == BinaryOp::Add { 0 } else { 1 };
@@ -68,14 +71,59 @@ impl Simplifier {
                         // TODO: VecDeque
                         operands.insert(0, Ast::Num(result));
                     }
-                    operands
+
+                    Binary { operator, operands }.build()
                 }
             };
 
-            ast = Binary { operator, operands }.into();
             // log::debug!("binary_num_ops: {ast:?}");
         }
 
         ast
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        assert_eq_display,
+        ast::binary::{Binary, BinaryOp},
+        build_ast,
+        simplifier::Simplifier,
+    };
+
+    #[test]
+    fn test_binary_num_ops_examples() {
+        let lhs = build_ast!(+ 1 "a" 2 3);
+        let rhs = build_ast!(+ 6 "a");
+        assert_eq_display!(&Simplifier::binary_num_ops(lhs), &rhs);
+
+        let lhs = build_ast!(+ 0 "a");
+        let rhs = build_ast!(+ "a");
+        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
+
+        let lhs = build_ast!(* 1 "a" 2 3);
+        let rhs = build_ast!(* 6 "a");
+        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
+
+        let lhs = build_ast!(* 1 "a");
+        let rhs = build_ast!(*"a");
+        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
+
+        let lhs = build_ast!(^ 1 "a" 2 3);
+        let rhs = build_ast!(^ 1);
+        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
+
+        let lhs = build_ast!(^ "a" 2 3);
+        let rhs = build_ast!(^ "a" 8);
+        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
+
+        let lhs = build_ast!(^ "a" 0);
+        let rhs = build_ast!(^ 1);
+        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
+
+        let lhs = build_ast!(^ "a" 1);
+        let rhs = build_ast!(^ "a");
+        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
     }
 }

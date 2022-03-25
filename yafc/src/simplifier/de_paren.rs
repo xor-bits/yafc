@@ -126,7 +126,7 @@ mod tests {
             .with(3)
             .build();
 
-        assert_eq_display(&Simplifier::de_paren(lhs), &rhs);
+        assert_eq_display!(&Simplifier::de_paren(lhs), &rhs);
     }
 
     #[test]
@@ -167,6 +167,6 @@ mod tests {
             .with(3)
             .build();
 
-        assert_eq_display(&lhs.map(32, Simplifier::de_paren), &rhs);
+        assert_eq_display!(&lhs.map(32, Simplifier::de_paren), &rhs);
     }
 }

@@ -377,7 +377,7 @@ mod test {
             coefficient: Binary::new(BinaryOp::Mul).with(2).with("y").build(),
         };
 
-        assert_eq_display(lhs, rhs);
+        assert_eq_display!(lhs, rhs);
     }
 
     #[test]
@@ -402,7 +402,7 @@ mod test {
                 .build(),
         };
 
-        assert_eq_display(lhs, rhs);
+        assert_eq_display!(lhs, rhs);
     }
 
     #[test]
@@ -424,7 +424,7 @@ mod test {
                 .build(),
         };
 
-        assert_eq_display(lhs, rhs);
+        assert_eq_display!(lhs, rhs);
     }
 
     #[test]
@@ -439,7 +439,7 @@ mod test {
             coefficient: 1.into(),
         };
 
-        assert_eq_display(lhs, rhs);
+        assert_eq_display!(lhs, rhs);
     }
 
     #[test]
@@ -471,6 +471,6 @@ mod test {
                 .build(),
         };
 
-        assert_eq_display(lhs, rhs);
+        assert_eq_display!(lhs, rhs);
     }
 }

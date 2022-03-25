@@ -104,6 +104,6 @@ mod test {
             )
             .build();
 
-        assert_eq_display(&lhs, &rhs);
+        assert_eq_display!(&lhs, &rhs);
     }
 }

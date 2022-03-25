@@ -126,3 +126,20 @@ impl Display for Ast {
         self.format(f, None)
     }
 }
+
+//
+
+#[macro_export]
+macro_rules! build_ast {
+    (+ $($e:expr)+) => {
+        Binary::new(BinaryOp::Add)$(.with($e))+.build()
+    };
+
+    (* $($e:expr)+) => {
+        Binary::new(BinaryOp::Mul)$(.with($e))+.build()
+    };
+
+    (^ $($e:expr)+) => {
+        Binary::new(BinaryOp::Pow)$(.with($e))+.build()
+    };
+}

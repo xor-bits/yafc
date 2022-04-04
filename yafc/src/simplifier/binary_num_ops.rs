@@ -15,15 +15,15 @@ impl Simplifier {
     /// examples:
     ///
     /// replace | with
-    /// :-:|:-:
+    ///      :-:|:-:
     /// 1+a+2+3 | 6+a
-    /// 0+a | a
+    ///     0+a | a
     /// 1*a*2*3 | 6*a
-    /// 1*a | a
+    ///     1*a | a
     /// 1^a^2^3 | 1
-    /// a^2^3 | a^8
-    /// a^0 | 1
-    /// a^1 | a
+    ///   a^2^3 | a^8
+    ///     a^0 | 1
+    ///     a^1 | a
     pub fn binary_num_ops(mut ast: Ast) -> Ast {
         if let Ast::Binary(Binary { operator, operands }) = ast {
             ast = match operator {

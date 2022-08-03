@@ -18,14 +18,14 @@ Factor: Binary = {
     <f:Factor> <v:Var> => f.with(v),
     <f:Factor> "(" <e:Expr> ")" => f.with(e),
     <f:Factor> "*" <t:SignedTerm> => f.with(t),
-    <f:Factor> "/" <t:SignedTerm> => f.with(Binary::negate(t)),
+    <f:Factor> "/" <t:SignedTerm> => f.with(t.with(-1)),
     SignedTerm => Binary::new(BinaryOp::Mul).with(<>),
 }
 
-SignedTerm: Ast = {
+SignedTerm: Binary = {
     "+" <a:SignedTerm> => a,
-    "-" <a:SignedTerm> => Binary::negate(a).build(),
-    Term => <>.build(),
+    "-" <a:SignedTerm> => a.with(-1),
+    Term => Binary::new(BinaryOp::Mul).with(<>),
 }
 
 Term: Binary = {
@@ -33,10 +33,10 @@ Term: Binary = {
     Atom => Binary::new(BinaryOp::Pow).with(<>),
 }
 
-SignedAtom: Ast = {
+SignedAtom: Binary = {
     "+" <a:SignedAtom> => a,
-    "-" <a:SignedAtom> => Binary::negate(a).build(),
-    Atom => <>
+    "-" <a:SignedAtom> => a.with(-1),
+    Atom => Binary::new(BinaryOp::Mul).with(<>),
 }
 
 Atom: Ast = {

@@ -5,27 +5,33 @@ grammar;
 
 pub Input: Ast = {
     Expr => <>.into(),
-};
+}
 
 Expr: Binary = {
     <e:Expr> "+" <f:Factor> => e.with(f),
     <e:Expr> "-" <f:Factor> => e.with(f.with(-1)),
     Factor => Binary::new(BinaryOp::Add).with(<>),
-};
+}
 
 Factor: Binary = {
     <f:Factor> <n:Num> => f.with(n),
     <f:Factor> <v:Var> => f.with(v),
     <f:Factor> "(" <e:Expr> ")" => f.with(e),
-    <f:Factor> "*" <t:Term> => f.with(t),
-    <f:Factor> "/" <t:Term> => f.with(t.with(-1)),
-    Term => Binary::new(BinaryOp::Mul).with(<>),
-};
+    <f:Factor> "*" <t:SignedTerm> => f.with(t),
+    <f:Factor> "/" <t:SignedTerm> => f.with(Binary::negate(t)),
+    SignedTerm => Binary::new(BinaryOp::Mul).with(<>),
+}
+
+SignedTerm: Ast = {
+    "+" <a:SignedTerm> => a,
+    "-" <a:SignedTerm> => Binary::negate(a).build(),
+    Term => <>.build(),
+}
 
 Term: Binary = {
     <t:Term> "^" <a:SignedAtom> => t.with(a),
-    SignedAtom => Binary::new(BinaryOp::Pow).with(<>),
-};
+    Atom => Binary::new(BinaryOp::Pow).with(<>),
+}
 
 SignedAtom: Ast = {
     "+" <a:SignedAtom> => a,
@@ -38,7 +44,7 @@ Atom: Ast = {
     Num => Ast::Num(<>),
     Var => Ast::Var(<>),
     "(" <Expr> ")" => <>.into(),
-};
+}
 
 Postfix: UnaryOp = {
     "!" => UnaryOp::Fac,
@@ -46,8 +52,8 @@ Postfix: UnaryOp = {
 
 Num: i64 = {
     r"[0-9]+" => i64::from_str(<>).unwrap()
-};
+}
 
 Var: String = {
     r"[a-zA-Z][a-zA-Z0-9]*" => <>.to_string(),
-};
+}

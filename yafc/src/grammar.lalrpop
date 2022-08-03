@@ -8,46 +8,46 @@ pub Input: Ast = {
 };
 
 Expr: Binary = {
-    <e:Expr> "+" <f:Prefix> => e.with(f),
-    <e:Expr> "-" <f:Prefix> => e.with(f.with(-1)),
-    Prefix => Binary::new(BinaryOp::Add).with(<>),
-};
-
-Prefix: Ast = {
-    "-" <p:Prefix> => Binary::negate(p).build(),
-    "+" <p:Prefix> => p,
-    <f:Factor> => f.build(),
+    <e:Expr> "+" <f:Factor> => e.with(f),
+    <e:Expr> "-" <f:Factor> => e.with(f.with(-1)),
+    Factor => Binary::new(BinaryOp::Add).with(<>),
 };
 
 Factor: Binary = {
     <f:Factor> <n:Num> => f.with(n),
     <f:Factor> <v:Var> => f.with(v),
     <f:Factor> "(" <e:Expr> ")" => f.with(e),
-    <f:Factor> "*" <t:Prefix> => f.with(t),
-    <f:Factor> "/" <t:Prefix> => f.with(Binary::new(BinaryOp::Pow).with(t).with(-1)),
-    Prefix => Binary::new(BinaryOp::Mul).with(<>),
+    <f:Factor> "*" <t:Term> => f.with(t),
+    <f:Factor> "/" <t:Term> => f.with(t.with(-1)),
+    Term => Binary::new(BinaryOp::Mul).with(<>),
 };
 
 Term: Binary = {
-    <t0:Term> "^" <t1:Term> => t0.with(t1),
-    Postfix => Binary::new(BinaryOp::Pow).with(<>),
+    <t:Term> "^" <a:SignedAtom> => t.with(a),
+    SignedAtom => Binary::new(BinaryOp::Pow).with(<>),
 };
 
-Postfix: Ast = {
-    <p:Postfix> "!" => Ast::unary(UnaryOp::Fac, p),
-    Atom => <>,
+SignedAtom: Ast = {
+    "+" <a:SignedAtom> => a,
+    "-" <a:SignedAtom> => Binary::negate(a).build(),
+    Atom => <>
 }
 
 Atom: Ast = {
+    <n:Num> <f:Postfix> => Ast::unary(f, Ast::Num(n)),
     Num => Ast::Num(<>),
     Var => Ast::Var(<>),
     "(" <Expr> ")" => <>.into(),
 };
+
+Postfix: UnaryOp = {
+    "!" => UnaryOp::Fac,
+}
 
 Num: i64 = {
     r"[0-9]+" => i64::from_str(<>).unwrap()
 };
 
 Var: String = {
-    r"[a-zA-Z_][a-zA-Z0-9_]*" => <>.to_string(),
+    r"[a-zA-Z][a-zA-Z0-9]*" => <>.to_string(),
 };

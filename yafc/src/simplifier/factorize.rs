@@ -263,7 +263,7 @@ pub fn term_factor_extract(term: Ast, factor: &Ast) -> TermFactorExtractResult {
 mod test {
     use crate::{
         assert_eq_display,
-        ast::binary::{Binary, BinaryOp},
+        ast::Ast,
         simplifier::{
             factorize::{term_factor_extract, term_factors, TermFactorExtractResult},
             Simplifier,
@@ -292,89 +292,64 @@ mod test {
     #[test]
     pub fn test_term_factors_mul() {
         // 2xy => 2,x,y
-        let term = Binary::new(BinaryOp::Mul)
-            .with(2)
-            .with("x")
-            .with("y")
-            .build();
+        let term = Ast::from(2) * 'x' * 'y';
 
         let mut iter = term_factors(&term);
 
         assert_eq!(iter.next(), Some(&2.into()));
-        assert_eq!(iter.next(), Some(&"x".into()));
-        assert_eq!(iter.next(), Some(&"y".into()));
+        assert_eq!(iter.next(), Some(&'x'.into()));
+        assert_eq!(iter.next(), Some(&'y'.into()));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     pub fn test_term_factors_pow() {
         // x^y^z => x
-        let term = Binary::new(BinaryOp::Pow)
-            .with("x")
-            .with("y")
-            .with("z")
-            .build();
+        let term = Ast::from('x') ^ 'y' ^ 'z';
 
         let mut iter = term_factors(&term);
 
-        assert_eq!(iter.next(), Some(&"x".into()));
+        assert_eq!(iter.next(), Some(&'x'.into()));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     pub fn test_term_factors_nest() {
         // 2xy^3 => 2,x,y
-        let term = Binary::new(BinaryOp::Mul)
-            .with(2)
-            .with("x")
-            .with(Binary::new(BinaryOp::Pow).with("y").with(3))
-            .build();
+        let term = Ast::from(2) * 'x' * (Ast::from('y') ^ 3);
 
         let mut iter = term_factors(&term);
 
         assert_eq!(iter.next(), Some(&2.into()));
-        assert_eq!(iter.next(), Some(&"x".into()));
-        assert_eq!(iter.next(), Some(&"y".into()));
+        assert_eq!(iter.next(), Some(&'x'.into()));
+        assert_eq!(iter.next(), Some(&'y'.into()));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     pub fn test_term_factors_nest_complex() {
         // ((y^2)^3)*x*(y^3)*(3^z) => y,x,y,3,z
-        let term = Binary::new(BinaryOp::Mul)
-            .with(
-                Binary::new(BinaryOp::Pow)
-                    .with(Binary::new(BinaryOp::Pow).with("y").with(2))
-                    .with(3),
-            )
-            .with("x")
-            .with(Binary::new(BinaryOp::Pow).with("y").with(3))
-            .with(Binary::new(BinaryOp::Mul).with(3).with("z"))
-            .build();
+        let term = ((Ast::from('y') ^ 2) ^ 2) * 'x' * (Ast::from('y') * 3) * (Ast::from(3) ^ 'z');
 
         let mut iter = term_factors(&term);
 
-        assert_eq!(iter.next(), Some(&"y".into()));
-        assert_eq!(iter.next(), Some(&"x".into()));
-        assert_eq!(iter.next(), Some(&"y".into()));
+        assert_eq!(iter.next(), Some(&'y'.into()));
+        assert_eq!(iter.next(), Some(&'x'.into()));
+        assert_eq!(iter.next(), Some(&'y'.into()));
         assert_eq!(iter.next(), Some(&3.into()));
-        assert_eq!(iter.next(), Some(&"z".into()));
+        assert_eq!(iter.next(), Some(&'z'.into()));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     pub fn test_term_factor_extract_mul() {
-        // 2xy / x => x,2y
-        let term = Binary::new(BinaryOp::Mul)
-            .with(2)
-            .with("x")
-            .with("y")
-            .build();
+        // 2xy / x => 2y
+        let term = Ast::from(2) * 'x' * 'y';
 
-        let lhs = term_factor_extract(term, &"x".into());
+        let lhs = term_factor_extract(term, &'x'.into());
         let rhs = TermFactorExtractResult::Some {
-            factor: "x".into(),
-            coefficient: Binary::new(BinaryOp::Mul).with(2).with("y").build(),
+            factor: 'x'.into(),
+            coefficient: Ast::from(2) * 'y',
         };
 
         assert_eq_display!(lhs, rhs);
@@ -383,23 +358,12 @@ mod test {
     #[test]
     pub fn test_term_factor_extract_pow() {
         // x^y^z / x => x^(y^z-1)
-        let term = Binary::new(BinaryOp::Pow)
-            .with("x")
-            .with("y")
-            .with("z")
-            .build();
+        let term = Ast::from('x') ^ 'y' ^ 'z';
 
-        let lhs = term_factor_extract(term, &"x".into()).binary_ops();
+        let lhs = term_factor_extract(term, &'x'.into()).binary_ops();
         let rhs = TermFactorExtractResult::Some {
-            factor: "x".into(),
-            coefficient: Binary::new(BinaryOp::Pow)
-                .with("x")
-                .with(
-                    Binary::new(BinaryOp::Add)
-                        .with(-1)
-                        .with(Binary::new(BinaryOp::Pow).with("y").with("z")),
-                )
-                .build(),
+            factor: 'x'.into(),
+            coefficient: Ast::from('x') ^ (Ast::from(-1) + (Ast::from('y') ^ 'z')),
         };
 
         assert_eq_display!(lhs, rhs);
@@ -408,20 +372,12 @@ mod test {
     #[test]
     pub fn test_term_factor_extract_nest() {
         // 2xy^3 / y => 2xy^2
-        let term = Binary::new(BinaryOp::Mul)
-            .with(2)
-            .with("x")
-            .with(Binary::new(BinaryOp::Pow).with("y").with(3))
-            .build();
+        let term = Ast::from(2) * 'x' * (Ast::from('y') ^ 3);
 
-        let lhs = term_factor_extract(term, &"y".into()).binary_ops();
+        let lhs = term_factor_extract(term, &'y'.into()).binary_ops();
         let rhs = TermFactorExtractResult::Some {
-            factor: "y".into(),
-            coefficient: Binary::new(BinaryOp::Mul)
-                .with(2)
-                .with("x")
-                .with(Binary::new(BinaryOp::Pow).with("y").with(2))
-                .build(),
+            factor: 'y'.into(),
+            coefficient: Ast::from(2) * 'x' * (Ast::from('y') ^ 2),
         };
 
         assert_eq_display!(lhs, rhs);
@@ -430,12 +386,12 @@ mod test {
     #[test]
     pub fn test_term_factor_extract_nest_complex_0() {
         // y^3 / y^3 => 1
-        let term = Binary::new(BinaryOp::Pow).with("y").with(3).build();
+        let term = Ast::from('y') ^ 3;
 
         let factor = term.clone();
         let lhs = term_factor_extract(term, &factor).binary_ops();
         let rhs = TermFactorExtractResult::Some {
-            factor: "y".into(),
+            factor: 'y'.into(),
             coefficient: 1.into(),
         };
 
@@ -445,30 +401,13 @@ mod test {
     #[test]
     pub fn test_term_factor_extract_nest_complex_1() {
         // ((y^2)^3)*x*(y^3)*(3^z) / y^3 => ((y^2)^3)*x*(3^z)
-        let term = Binary::new(BinaryOp::Mul)
-            .with(
-                Binary::new(BinaryOp::Pow)
-                    .with(Binary::new(BinaryOp::Pow).with("y").with(2))
-                    .with(3),
-            )
-            .with("x")
-            .with(Binary::new(BinaryOp::Pow).with("y").with(3))
-            .with(Binary::new(BinaryOp::Mul).with(3).with("z"))
-            .build();
+        let term = ((Ast::from('y') ^ 2) ^ 3) * 'x' * (Ast::from('y') ^ 3) * (Ast::from(3) ^ 'z');
 
-        let factor = Binary::new(BinaryOp::Pow).with("y").with(3).build();
+        let factor = Ast::from('y') ^ 3;
         let lhs = term_factor_extract(term, &factor).binary_ops();
         let rhs = TermFactorExtractResult::Some {
             factor,
-            coefficient: Binary::new(BinaryOp::Mul)
-                .with(
-                    Binary::new(BinaryOp::Pow)
-                        .with(Binary::new(BinaryOp::Pow).with("y").with(2))
-                        .with(3),
-                )
-                .with("x")
-                .with(Binary::new(BinaryOp::Mul).with(3).with("z"))
-                .build(),
+            coefficient: ((Ast::from('y') ^ 2) ^ 3) * 'x' * (Ast::from('3') ^ 'z'),
         };
 
         assert_eq_display!(lhs, rhs);

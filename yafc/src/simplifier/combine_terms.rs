@@ -73,37 +73,18 @@ impl Simplifier {
 
 #[cfg(test)]
 mod test {
-    use super::Simplifier;
-    use crate::{
-        assert_eq_display,
-        ast::binary::{Binary, BinaryOp},
-    };
+    macro_rules! combine_terms_assert_eq {
+        ($lhs:expr, $rhs:expr) => {
+            let lhs = crate::ast::Ast::parse($lhs)
+                .unwrap()
+                .map(32, crate::simplifier::Simplifier::combine_terms);
+            let rhs = crate::ast::Ast::parse($rhs).unwrap();
+            crate::assert_eq_display!(lhs, rhs);
+        };
+    }
 
     #[test]
     pub fn test_combine_terms() {
-        // y * x * 2 + x + x * 2 + 3
-        // ==
-        // 3 + (3 + 2 * y) * x
-        let ast = Binary::new(BinaryOp::Add)
-            .with(Binary::new(BinaryOp::Mul).with("y").with("x").with(2))
-            .with("x")
-            .with(Binary::new(BinaryOp::Mul).with("x").with(2))
-            .with(3)
-            .build();
-        let lhs = Simplifier::combine_terms(ast).map(32, Simplifier::binary_num_ops);
-        let rhs = Binary::new(BinaryOp::Add)
-            .with(3)
-            .with(
-                Binary::new(BinaryOp::Mul)
-                    .with(
-                        Binary::new(BinaryOp::Add)
-                            .with(3)
-                            .with(Binary::new(BinaryOp::Mul).with(2).with("y")),
-                    )
-                    .with("x"),
-            )
-            .build();
-
-        assert_eq_display!(&lhs, &rhs);
+        combine_terms_assert_eq!("y * x * 2 + x + x * 2 + 3", "(y * 2 + 1 + 2) * x + 1 * 3");
     }
 }

@@ -28,7 +28,7 @@ impl Simplifier {
         if let Ast::Binary(Binary { operator, operands }) = ast {
             ast = match operator {
                 // power op has to be handled differently
-                // because there the order of the operands matter
+                // because here the order of _operands_ matter
                 BinaryOp::Pow => {
                     operands
                         .into_iter()
@@ -49,30 +49,37 @@ impl Simplifier {
                         })
                 }
                 // otherwise, all numbers are just collected
-                other => {
-                    let init = if other == BinaryOp::Add { 0 } else { 1 };
-                    let mut result = init;
-                    let mut operands: Vec<Ast> = operands
-                        .into_iter()
-                        .filter(|ast| match ast {
-                            Ast::Num(n) => {
-                                if other == BinaryOp::Add {
-                                    result += n
-                                } else {
-                                    result *= n
-                                }
-                                false
-                            }
-                            _ => true,
-                        })
-                        .collect();
+                BinaryOp::Mul => {
+                    let multiplier: i64 = Self::collect_numbers(&operands).product();
+                    let operands = Self::collect_non_numbers(operands);
 
-                    if result != init {
-                        // TODO: VecDeque
-                        operands.insert(0, Ast::Num(result));
+                    if multiplier == 0 {
+                        return Ast::Num(0);
                     }
 
-                    Binary { operator, operands }.build()
+                    Binary {
+                        operator,
+                        operands: (multiplier != 1)
+                            .then_some(Ast::Num(multiplier))
+                            .into_iter()
+                            .chain(operands)
+                            .collect(),
+                    }
+                    .build()
+                }
+                BinaryOp::Add => {
+                    let sum: i64 = Self::collect_numbers(&operands).sum();
+                    let operands = Self::collect_non_numbers(operands);
+
+                    Binary {
+                        operator,
+                        operands: (sum != 0)
+                            .then_some(Ast::Num(sum))
+                            .into_iter()
+                            .chain(operands)
+                            .collect(),
+                    }
+                    .build()
                 }
             };
 
@@ -81,49 +88,46 @@ impl Simplifier {
 
         ast
     }
+
+    fn collect_numbers(operands: &[Ast]) -> impl Iterator<Item = i64> + '_ {
+        operands.iter().filter_map(|ast| match ast {
+            Ast::Num(n) => Some(*n),
+            _ => None,
+        })
+    }
+
+    fn collect_non_numbers(operands: Vec<Ast>) -> impl Iterator<Item = Ast> {
+        operands.into_iter().filter_map(|ast| match ast {
+            Ast::Num(..) => None,
+            ast => Some(ast),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        assert_eq_display,
-        ast::binary::{Binary, BinaryOp},
-        build_ast,
-        simplifier::Simplifier,
-    };
+    macro_rules! binary_num_ops_assert_eq {
+        ($lhs:expr, $rhs:expr) => {
+            let lhs = crate::ast::Ast::parse($lhs)
+                .unwrap()
+                .map(32, crate::simplifier::Simplifier::binary_num_ops);
+            let rhs = crate::ast::Ast::parse($rhs).unwrap();
+            crate::assert_eq_display!(lhs, rhs);
+        };
+    }
 
     #[test]
     fn test_binary_num_ops_examples() {
-        let lhs = build_ast!(+ 1 "a" 2 3);
-        let rhs = build_ast!(+ 6 "a");
-        assert_eq_display!(&Simplifier::binary_num_ops(lhs), &rhs);
+        binary_num_ops_assert_eq!("1 + a + 2 + 3", "6 + a");
+        binary_num_ops_assert_eq!("0 + a", "a");
 
-        let lhs = build_ast!(+ 0 "a");
-        let rhs = build_ast!(+ "a");
-        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
+        binary_num_ops_assert_eq!("1 * a * 2 * 3", "6 * a");
+        binary_num_ops_assert_eq!("1 * a", "a");
+        binary_num_ops_assert_eq!("0 * a", "0");
 
-        let lhs = build_ast!(* 1 "a" 2 3);
-        let rhs = build_ast!(* 6 "a");
-        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
-
-        let lhs = build_ast!(* 1 "a");
-        let rhs = build_ast!(*"a");
-        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
-
-        let lhs = build_ast!(^ 1 "a" 2 3);
-        let rhs = build_ast!(^ 1);
-        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
-
-        let lhs = build_ast!(^ "a" 2 3);
-        let rhs = build_ast!(^ "a" 8);
-        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
-
-        let lhs = build_ast!(^ "a" 0);
-        let rhs = build_ast!(^ 1);
-        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
-
-        let lhs = build_ast!(^ "a" 1);
-        let rhs = build_ast!(^ "a");
-        assert_eq_display!(Simplifier::binary_num_ops(lhs), rhs);
+        binary_num_ops_assert_eq!("1 ^ a ^ 2 ^ 3", "1");
+        binary_num_ops_assert_eq!("a ^ 2 ^ 3", "a ^ 8");
+        binary_num_ops_assert_eq!("a ^ 0", "1");
+        binary_num_ops_assert_eq!("a ^ 1", "a");
     }
 }

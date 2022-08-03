@@ -74,20 +74,16 @@ impl Simplifier {
                             operator: BinaryOp::Pow,
                             mut operands,
                         }) => {
-                            let first = operands.remove(0);
-                            Binary::new(BinaryOp::Pow)
-                                .with(first)
-                                .with(
-                                    Binary::new(BinaryOp::Mul)
-                                        .with(Binary {
-                                            operator: BinaryOp::Pow,
-                                            operands,
-                                        })
-                                        .with(last),
-                                )
-                                .build()
+                            let tower_first = operands.remove(0);
+                            let tower = Binary {
+                                operator: BinaryOp::Pow,
+                                operands,
+                            }
+                            .build();
+
+                            tower_first ^ (tower * last)
                         }
-                        ast => Binary::new(BinaryOp::Pow).with(ast).with(last).build(),
+                        ast => ast ^ last,
                     }
                 } else {
                     ast
@@ -103,70 +99,23 @@ impl Simplifier {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        assert_eq_display,
-        ast::binary::{Binary, BinaryOp},
-        simplifier::Simplifier,
-    };
-
-    #[test]
-    pub fn test_de_paren() {
-        // lhs: (0*1)*(a+b)*3
-        // rhs: 0*1*(a+b)*3
-
-        let lhs = Binary::new(BinaryOp::Mul)
-            .with(Binary::new(BinaryOp::Mul).with(0).with(1))
-            .with(Binary::new(BinaryOp::Add).with("a").with("b"))
-            .with(3)
-            .build();
-        let rhs = Binary::new(BinaryOp::Mul)
-            .with(0)
-            .with(1)
-            .with(Binary::new(BinaryOp::Add).with("a").with("b"))
-            .with(3)
-            .build();
-
-        assert_eq_display!(&Simplifier::de_paren(lhs), &rhs);
+    macro_rules! de_paren_s_assert_eq {
+        ($lhs:expr, $rhs:expr) => {
+            let lhs = crate::ast::Ast::parse($lhs)
+                .unwrap()
+                .map(32, crate::simplifier::Simplifier::de_paren);
+            let rhs = crate::ast::Ast::parse($rhs).unwrap();
+            crate::assert_eq_display!(lhs, rhs);
+        };
     }
 
     #[test]
-    pub fn test_de_paren_rec() {
-        // lhs: (0*1*(a*b*(f*g)))*(a+b+c*d)*3
-        // rhs: 0*1*a*b*f*g*(a+b+c*d)*3
+    pub fn test_de_paren() {
+        de_paren_s_assert_eq!("(0 * 1) * (a + b) * 3", "0 * 1 * (a + b) * 3");
 
-        let lhs = Binary::new(BinaryOp::Mul)
-            .with(
-                Binary::new(BinaryOp::Mul).with(0).with(1).with(
-                    Binary::new(BinaryOp::Mul)
-                        .with("a")
-                        .with("b")
-                        .with(Binary::new(BinaryOp::Mul).with("f").with("g")),
-                ),
-            )
-            .with(
-                Binary::new(BinaryOp::Add)
-                    .with("a")
-                    .with("b")
-                    .with(Binary::new(BinaryOp::Mul).with("c").with("d")),
-            )
-            .with(3)
-            .build();
-        let rhs = Binary::new(BinaryOp::Mul)
-            .with(0)
-            .with(1)
-            .with("a")
-            .with("b")
-            .with("f")
-            .with("g")
-            .with(
-                Binary::new(BinaryOp::Add)
-                    .with("a")
-                    .with("b")
-                    .with(Binary::new(BinaryOp::Mul).with("c").with("d")),
-            )
-            .with(3)
-            .build();
-
-        assert_eq_display!(&lhs.map(32, Simplifier::de_paren), &rhs);
+        de_paren_s_assert_eq!(
+            "(0 * 1 * (a * b * (f * g))) * (a + b + c * d) * 3",
+            "0 * 1 * a * b * f * g * (a + b + c * d) * 3"
+        );
     }
 }

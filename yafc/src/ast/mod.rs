@@ -3,7 +3,7 @@ use self::{
     unary::{Unary, UnaryOp},
 };
 use core::fmt;
-use lalrpop_util::lalrpop_mod;
+use lalrpop_util::{lalrpop_mod, lexer::Token, ParseError};
 use std::fmt::{Debug, Display};
 
 //
@@ -13,6 +13,7 @@ pub use grammar::InputParser;
 //
 
 pub mod binary;
+pub mod build;
 pub mod unary;
 
 //
@@ -36,6 +37,10 @@ pub enum Ast {
 //
 
 impl Ast {
+    pub fn parse(input: &str) -> Result<Ast, ParseError<usize, Token, &str>> {
+        InputParser::new().parse(input)
+    }
+
     pub fn format(&self, f: &mut fmt::Formatter<'_>, outer: Option<BinaryOp>) -> fmt::Result {
         match self {
             Ast::Num(v) => write!(f, "{v}"),
@@ -51,6 +56,24 @@ impl Ast {
 
     pub fn map<F: FnMut(Self) -> Self>(self, limit: usize, mut f: F) -> Self {
         self.recurse_mut_with(limit, &mut f)
+    }
+
+    pub(crate) fn from_pre_post(pre: Vec<&str>, mut ast: Ast, post: Option<UnaryOp>) -> Self {
+        let negate_count = pre
+            .into_iter()
+            .flat_map(|pre| pre.chars())
+            .filter(|c| *c == '-')
+            .count();
+        let negative = negate_count % 2 == 1;
+
+        if let Some(post) = post {
+            ast = Ast::unary(post, ast);
+        }
+        if negative {
+            ast = Binary::negate(ast).build();
+        }
+
+        ast
     }
 
     fn recurse_with<F: FnMut(&Self)>(&self, limit: usize, f: &mut F) {
@@ -117,6 +140,12 @@ impl From<String> for Ast {
 
 impl From<&str> for Ast {
     fn from(val: &str) -> Self {
+        Self::Var(val.to_string())
+    }
+}
+
+impl From<char> for Ast {
+    fn from(val: char) -> Self {
         Self::Var(val.to_string())
     }
 }

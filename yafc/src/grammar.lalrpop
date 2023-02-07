@@ -1,59 +1,70 @@
-use std::str::FromStr;
-use crate::ast::{Ast, UnaryOp, BinaryOp, Binary};
+use egg::Id;
+use crate::ast::YafcExpr;
+use lalrpop_util::ParseError;
 
-grammar;
 
-pub Input: Ast = {
-    Expr => <>.into(),
+//
+
+grammar(expr: &mut YafcExpr);
+
+extern {
+    type Error = String;
 }
 
-Expr: Binary = {
-    <e:Expr> "+" <f:Factor> => e.with(f),
-    <e:Expr> "-" <f:Factor> => e.with(f.with(-1)),
-    Factor => Binary::new(BinaryOp::Add).with(<>),
+//
+
+pub Input: Id = {
+    Expr => <>,
 }
 
-Factor: Binary = {
-    <f:Factor> <n:Num> => f.with(n),
-    <f:Factor> <v:Var> => f.with(v),
-    <f:Factor> "(" <e:Expr> ")" => f.with(e),
-    <f:Factor> "*" <t:SignedTerm> => f.with(t),
-    <f:Factor> "/" <t:SignedTerm> => f.with(t.with(-1)),
-    SignedTerm => Binary::new(BinaryOp::Mul).with(<>),
+Expr: Id = {
+    <e:Expr> "+" <f:Factor> => expr.make_add(e, f),
+    <e:Expr> "-" <f:Factor> => expr.make_sub(e, f),
+    Factor => <>,
 }
 
-SignedTerm: Binary = {
-    "+" <a:SignedTerm> => a,
-    "-" <a:SignedTerm> => a.with(-1),
-    Term => Binary::new(BinaryOp::Mul).with(<>),
+Factor: Id = {
+    <f:Factor> <a:Atom> => expr.make_mul(f, a),
+    <f:Factor> "*" <t:SignedTerm> => expr.make_mul(f, t),
+    <f:Factor> "/" <t:SignedTerm> => expr.make_div(f, t),
+    SignedTerm => <>,
 }
 
-Term: Binary = {
-    <t:Term> "^" <a:SignedAtom> => t.with(a),
-    Atom => Binary::new(BinaryOp::Pow).with(<>),
+SignedTerm: Id = {
+    "+" <SignedTerm> => <>,
+    "-" <SignedTerm> => expr.make_neg(<>),
+    Term => <>,
 }
 
-SignedAtom: Binary = {
-    "+" <a:SignedAtom> => a,
-    "-" <a:SignedAtom> => a.with(-1),
-    Atom => Binary::new(BinaryOp::Mul).with(<>),
+Term: Id = {
+    <t:Term> "^" <a:SignedAtom> => expr.make_pow(t, a),
+    Atom => <>,
 }
 
-Atom: Ast = {
-    <n:Num> <f:Postfix> => Ast::unary(f, Ast::Num(n)),
-    Num => Ast::Num(<>),
-    Var => Ast::Var(<>),
-    "(" <Expr> ")" => <>.into(),
+SignedAtom: Id = {
+    "+" <SignedAtom> => <>,
+    "-" <SignedAtom> => expr.make_neg(<>),
+    Atom => <>,
 }
 
-Postfix: UnaryOp = {
-    "!" => UnaryOp::Fac,
+Atom: Id = {
+    // <Num> "!" => expr.make_fac(<>),
+    // <Atom> "!" => expr.make_fac(<>),
+    Num => expr.make_num(<>),
+    Var => expr.make_var(<>),
+    "(" <Expr> ")" => <>,
 }
 
 Num: i64 = {
-    r"[0-9]+" => i64::from_str(<>).unwrap()
+    r"[0-9]+" =>? {
+        <>
+            .parse()
+            .map_err(|err| ParseError::User {
+                error: format!("Invalid number literal: {err}")
+            })
+    }
 }
 
-Var: String = {
-    r"[a-zA-Z][a-zA-Z0-9]*" => <>.to_string(),
+Var: &'input str = {
+    r"[a-zA-Z][a-zA-Z0-9]*" => <>,
 }

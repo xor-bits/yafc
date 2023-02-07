@@ -19,4 +19,12 @@ pub struct CliArgs {
     /// Verbose output
     #[clap(long, short, value_parser)]
     pub verbose: bool,
+
+    /// Output in latex
+    #[clap(long, value_parser)]
+    pub latex_out: bool,
+
+    /// Output in latex
+    #[clap(long, value_parser)]
+    pub latex_in: bool,
 }

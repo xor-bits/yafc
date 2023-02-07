@@ -1,11 +1,4 @@
-#![feature(box_patterns)]
-#![feature(drain_filter)]
-#![feature(if_let_guard)]
-
-//
-
 pub mod ast;
-pub mod eq;
 pub mod simplifier;
 
 //

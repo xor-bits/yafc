@@ -1,10 +1,11 @@
-use std::io;
-
 use clap::Parser;
 use cli::CliArgs;
-use log::LevelFilter;
 use rustyline::{error::ReadlineError, Editor};
-use yafc::{ast::InputParser, simplifier::Simplifier};
+use std::io;
+use yafc::{
+    ast::{PrettyStyle, YafcExpr},
+    simplifier::Simplifier,
+};
 
 //
 
@@ -15,10 +16,11 @@ pub mod cli;
 fn main() {
     let cli: CliArgs = CliArgs::parse();
 
-    env_logger::builder()
-        .parse_default_env()
-        .filter(Some("rustyline"), LevelFilter::Error)
-        .init();
+    tracing_subscriber::fmt::init();
+    // env_logger::builder()
+    //     .parse_default_env()
+    //     .filter(Some("rustyline"), LevelFilter::Error)
+    //     .init();
 
     if let Some(line) = &cli.direct {
         run_line(line, &cli, 0);
@@ -54,15 +56,24 @@ fn main() {
 }
 
 fn run_line(line: &str, cli: &CliArgs, i: usize) {
-    match InputParser::new().parse(line) {
+    match YafcExpr::parse_infix(line) {
         Ok(ast) => {
-            let simplified = Simplifier::run(ast.clone());
+            let simplified = Simplifier::run(&ast);
+
+            let style = if cli.latex_out {
+                PrettyStyle::LaTeX
+            } else {
+                <_>::default()
+            };
+            let ast = ast.pretty_opt(style);
+            let simplified = simplified.pretty_opt(style);
 
             if cli.debug {
                 println!("dbg: {ast:?} = {simplified:?}");
+                println!("dbg: => {ast} = {simplified}");
             }
             if cli.verbose {
-                println!("out[{i}]: {simplified:#}\n");
+                println!("out[{i}]: {simplified}\n");
             } else {
                 println!("{simplified:#}");
             }
